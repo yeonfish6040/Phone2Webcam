@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "642036515002",
+    "project_id": "phone2webcam",
+    "storage_bucket": "phone2webcam.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:642036515002:android:44a1b7515855b748e20283",
+        "android_client_info": {
+          "package_name": "com.yeonfish.phone2webcam"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "642036515002-a3ti8i8p5v1uosug9al5bfcjcdl79neq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.yeonfish.phone2webcam",
+            "certificate_hash": "c05d55ba076f9eedca588728478ad969a3135fdd"
+          }
+        },
+        {
+          "client_id": "642036515002-ui2j1sn9rmths3gmgt9os2v60rjguolm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCORbFChD0Xyu2GbDOIXkBfXekT7_Sym2E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "642036515002-ui2j1sn9rmths3gmgt9os2v60rjguolm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

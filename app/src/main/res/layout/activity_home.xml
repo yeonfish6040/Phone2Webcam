@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/relativeLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#ffffff"
+    android:orientation="vertical">
+
+    <androidx.camera.view.PreviewView
+        android:id="@+id/cameraView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="0dp"
+        android:background="@color/gray_bg_option"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+    </androidx.camera.view.PreviewView>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/socketRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="216dp" />
+
+    <LinearLayout
+        android:id="@+id/viewNaviController"
+        android:layout_width="match_parent"
+        android:layout_height="136dp"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="598dp"
+        android:background="@null"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/textView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAlignment="center"
+            android:text="0%" />
+
+        <ImageButton
+            android:id="@+id/imageButton8"
+            android:layout_width="match_parent"
+            android:layout_height="9dp"
+            android:layout_weight="1"
+            android:adjustViewBounds="true"
+            android:background="@null"
+            android:contentDescription="@string/change_camera"
+            android:scaleType="fitCenter"
+            app:srcCompat="@drawable/change" />
+
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="359dp"
+            android:layout_height="83dp"
+            android:layout_gravity="center" />
+
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/loadingView"
+        android:layout_width="35dp"
+        android:layout_height="35dp"
+        android:layout_centerInParent="true"
+        android:background="@drawable/common_loading"
+        android:contentDescription="@android:string/untitled" />
+
+</RelativeLayout>

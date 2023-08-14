@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Phone2Webcam</string>
+    <string name="change_camera">카메라 변경</string>
+</resources>
