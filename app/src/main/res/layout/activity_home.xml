@@ -8,17 +8,16 @@
     android:background="#ffffff"
     android:orientation="vertical">
 
-    <androidx.camera.view.PreviewView
+    <TextureView
         android:id="@+id/cameraView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_alignParentBottom="true"
         android:layout_marginBottom="0dp"
-        android:background="@color/gray_bg_option"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-    </androidx.camera.view.PreviewView>
+    </TextureView>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/socketRecyclerView"

@@ -1,38 +1,42 @@
 package com.yeonfish.phone2webcam.common.activity;
 
-import android.annotation.SuppressLint;
+import android.Manifest;
+import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.drawable.AnimationDrawable;
+import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.ImageReader;
 import android.os.Bundle;
-import android.util.Log;
+import android.util.Size;
+import android.util.SparseIntArray;
+import android.view.Surface;
+import android.view.TextureView;
 import android.view.View;
 import android.widget.SeekBar;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.OptIn;
-import androidx.camera.core.Camera;
-import androidx.camera.core.CameraControl;
-import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
-import androidx.camera.core.ExperimentalZeroShutterLag;
-import androidx.camera.core.ImageCapture;
-import androidx.camera.core.Preview;
-import androidx.camera.lifecycle.ProcessCameraProvider;
-import androidx.camera.view.PreviewView;
-import androidx.lifecycle.LifecycleOwner;
+import androidx.core.app.ActivityCompat;
 
-import com.google.common.util.concurrent.ListenableFuture;
 import com.yeonfish.phone2webcam.R;
-import com.yeonfish.phone2webcam.common.socket.SocketAdapter;
+import com.yeonfish.phone2webcam.common.cameraUtil.Zoom;
 import com.yeonfish.phone2webcam.common.socket.SocketServer;
 import com.yeonfish.phone2webcam.databinding.ActivityHomeBinding;
 
-import java.util.concurrent.ExecutionException;
+import java.util.Arrays;
 
 
 public class HomeActivity extends BaseActivity {
+    private static final int PERMISSION_REQUEST_CODE = 1;
 
     private static final int FULL_SCREEN_SETTING = View.SYSTEM_UI_FLAG_FULLSCREEN |
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
@@ -41,68 +45,61 @@ public class HomeActivity extends BaseActivity {
             View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
             View.SYSTEM_UI_FLAG_IMMERSIVE;
 
+    private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
+
+    static {
+        ORIENTATIONS.append(Surface.ROTATION_0, 90);
+        ORIENTATIONS.append(Surface.ROTATION_90, 0);
+        ORIENTATIONS.append(Surface.ROTATION_180, 270);
+        ORIENTATIONS.append(Surface.ROTATION_270, 180);
+    }
+
+    private int REQUEST_CODE_PERMISSIONS = 1001;
+    private final String[] REQUIRED_PERMISSIONS = new String[]{"android.permission.CAMERA"};
+
+
     private ActivityHomeBinding binding;
 
-    private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
-    private PreviewView cameraView;
-    private ImageCapture imageCapture;
     private int cLens = CameraSelector.LENS_FACING_BACK;
-    private Camera camera = null;
-    private SocketAdapter socketAdapter;
+
+    // Camera2 Variables
+    private String cameraId;
+    private CameraManager manager;
+    private CameraDevice cameraDevice;
+    private CameraCaptureSession cameraCaptureSession;
+    private CaptureRequest captureRequest;
+    private CaptureRequest.Builder captureRequestBuilder;
+    private Size imageDimensions;
+    private TextureView textureView;
+    private ImageReader imageReader;
+    private Zoom zoom;
+    private boolean isChanging = false; // Is camera changing in progress between front/back
 
 
-
-    @SuppressLint("RestrictedApi")
     @Override
-    @OptIn(markerClass = ExperimentalZeroShutterLag.class)
-    protected void  onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         binding = ActivityHomeBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
 
         // camera2
-//        CameraManager cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
-//        try {
-//            cameraManager.openCamera(cameraManager.getCameraIdList());
-//        } catch (CameraAccessException e) {
-//            throw new RuntimeException(e);
-//        }
-
-
-        // camerax
-        cameraProviderFuture = ProcessCameraProvider.getInstance(this);
-        cameraView = binding.cameraView;
-
-        imageCapture = new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_ZERO_SHUTTER_LAG).build();
-        try {
-            camera = bindPreview(cameraProviderFuture.get(), cLens);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        new Thread(() -> {
-            SocketServer socketServer = new SocketServer(17101, binding.cameraView, imageCapture);
-        }).start();
-
-//        binding.socketRecyclerView
+        textureView = binding.cameraView;
+        startCamera();
 
         binding.imageButton8.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (isChanging) return;
                 try {
-                    showLoading();
-                    if (cLens == CameraSelector.LENS_FACING_BACK)
-                        camera = bindPreview(cameraProviderFuture.get(), CameraSelector.LENS_FACING_FRONT);
-                    else camera = bindPreview(cameraProviderFuture.get(), CameraSelector.LENS_FACING_BACK);
-
-                    cLens = cLens==CameraSelector.LENS_FACING_BACK ? CameraSelector.LENS_FACING_FRONT:CameraSelector.LENS_FACING_BACK;
-                    hideLoading();
-                } catch (ExecutionException e) {
+                    isChanging = true;
+                    cameraDevice.close();
+                    cLens = cLens == CameraSelector.LENS_FACING_BACK ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
+                    openCamera(cLens==CameraSelector.LENS_FACING_BACK?0:1);
+                } catch (CameraAccessException e) {
                     throw new RuntimeException(e);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                } finally {
+                    isChanging = false;
                 }
             }
         });
@@ -110,17 +107,17 @@ public class HomeActivity extends BaseActivity {
         binding.seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean byUser) {
-                if (camera != null) {
-                    CameraControl cameraControl = camera.getCameraControl();
+                try {
+                    CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
 
-                    float maxZoomRatio = ((CameraInfo) camera.getCameraInfo()).getZoomState().getValue().getMaxZoomRatio();
-                    float zoomRatio = maxZoomRatio / seekBar.getMax() * (float) progress;
+                    float zoomRatio = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) / seekBar.getMax() * (float) progress;
 
-                    float percentage = 1/maxZoomRatio;
-                    float current = percentage*zoomRatio;
-                    binding.textView.setText(String.valueOf((int)(current*100))+"%");
-                    Log.d("MaxZoom", String.valueOf(maxZoomRatio));
-                    cameraControl.setLinearZoom(current);
+                    float percentage = 1 / characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+                    float current = percentage * zoomRatio;
+                    binding.textView.setText(String.valueOf((int) (current * 100)) + "%");
+                    zoom.setZoom(captureRequestBuilder, 2f);
+                } catch (CameraAccessException e) {
+                    throw new RuntimeException(e);
                 }
             }
 
@@ -137,41 +134,126 @@ public class HomeActivity extends BaseActivity {
 
     }
 
-    Camera bindPreview(@NonNull ProcessCameraProvider cameraProvider, int lens) {
 
-        cameraProvider.unbindAll();
-
-        Preview preview = new Preview.Builder()
-                .build();
-
-        CameraSelector cameraSelector = new CameraSelector.Builder()
-            .requireLensFacing(lens)
-            .build();
-
-
-        preview.setSurfaceProvider(cameraView.getSurfaceProvider());
-        Camera camera = cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, imageCapture, preview);
-        return camera;
+    private void startCamera() {
+        textureView.setSurfaceTextureListener(textureListener);
     }
 
-    private void showLoading() {
-        binding.loadingView.setVisibility(View.VISIBLE);
-        ((AnimationDrawable) binding.loadingView.getBackground()).start();
-    }
+    private void openCamera(int camera) throws CameraAccessException {
+        manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
 
-    private void hideLoading() {
-        binding.loadingView.setVisibility(View.INVISIBLE);
-        ((AnimationDrawable) binding.loadingView.getBackground()).stop();
-    }
+        cameraId = manager.getCameraIdList()[camera];
+        CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
 
-    private boolean appInstalledOrNot(String uri) {
-        try {
-            getPackageManager().getPackageInfo(uri, PackageManager.GET_ACTIVITIES);
-            return true;
-        } catch (PackageManager.NameNotFoundException ignored) {
-            return false;
+        StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
+        zoom = new Zoom(characteristics);
+
+        imageDimensions = map.getOutputSizes(SurfaceTexture.class)[2];
+        imageReader = ImageReader.newInstance(imageDimensions.getWidth(), imageDimensions.getHeight(), ImageFormat.JPEG, 1);
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            manager.openCamera(cameraId, stateCallback, null);
+        } else {
+            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
         }
     }
+
+    private void createCameraPreview() throws CameraAccessException {
+        SurfaceTexture texture = textureView.getSurfaceTexture();
+        texture.setDefaultBufferSize(imageDimensions.getWidth(), imageDimensions.getHeight());
+        Surface surface = new Surface(texture);
+
+        captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG);
+        captureRequestBuilder.addTarget(surface);
+
+        cameraDevice.createCaptureSession(Arrays.asList(surface, imageReader.getSurface()), new CameraCaptureSession.StateCallback() {
+            @Override
+            public void onConfigured(@NonNull CameraCaptureSession session) {
+                if (cameraDevice == null) {
+                    return;
+                }
+
+                cameraCaptureSession = session;
+
+                new Thread(() -> {
+                    SocketServer socketServer = new SocketServer(17101, captureRequestBuilder, cameraCaptureSession, imageReader);
+                }).start();
+
+                try {
+                    updatePreview();
+                } catch (CameraAccessException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            @Override
+            public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                Toast.makeText(getApplicationContext(), "Configuration Changed", Toast.LENGTH_LONG).show();
+            }
+        }, null);
+    }
+
+    private void updatePreview() throws CameraAccessException {
+        if (cameraDevice == null) {
+            return;
+        }
+
+        captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, null);
+
+    }
+
+    // 리스너 콜백 함수
+    private TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
+        @Override
+        public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
+            try {
+                openCamera(cLens==CameraSelector.LENS_FACING_BACK?0:1);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
+
+        }
+
+        @Override
+        public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
+            return false;
+        }
+
+        @Override
+        public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
+
+        }
+    };
+
+
+    private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(@NonNull CameraDevice camera) {
+            cameraDevice = camera;
+            try {
+                createCameraPreview();
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void onDisconnected(@NonNull CameraDevice camera) {
+            cameraDevice.close();
+        }
+
+        @Override
+        public void onError(@NonNull CameraDevice camera, int error) {
+            cameraDevice.close();
+            cameraDevice = null;
+        }
+    };
 
     @Override
     public void finish() {

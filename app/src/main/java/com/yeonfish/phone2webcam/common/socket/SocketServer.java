@@ -2,19 +2,19 @@ package com.yeonfish.phone2webcam.common.socket;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.TotalCaptureResult;
 import android.media.Image;
+import android.media.ImageReader;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.OptIn;
-import androidx.camera.core.ExperimentalGetImage;
-import androidx.camera.core.ImageCapture;
-import androidx.camera.core.ImageCaptureException;
-import androidx.camera.core.ImageProxy;
 import androidx.camera.view.PreviewView;
-import androidx.core.content.ContextCompat;
 
 import com.yeonfish.phone2webcam.databinding.ActivityHomeBinding;
 
@@ -32,16 +32,18 @@ public class SocketServer {
     private PreviewView view;
     private ServerSocket serverSocket;
     private ActivityHomeBinding binding;
-    private ImageCapture imageCapture;
+    private ImageReader imageReader;
+    CameraCaptureSession cameraCaptureSession;
+    CaptureRequest.Builder captureRequstBuilder;
     private volatile byte[] byteArray;
-    private volatile boolean isFirst = true;
 
 
 
-    public SocketServer(int port, PreviewView view, ImageCapture imageCapture) {
+    public SocketServer(int port, CaptureRequest.Builder captureRequstBuilder, CameraCaptureSession cameraCaptureSession, ImageReader imageReader) {
         this.port = port;
-        this.view = view;
-        this.imageCapture = imageCapture;
+        this.captureRequstBuilder = captureRequstBuilder;
+        this.cameraCaptureSession = cameraCaptureSession;
+        this.imageReader = imageReader;
 
         run();
     }
@@ -76,43 +78,42 @@ public class SocketServer {
                 outputStream.flush();
                 Log.d("Socket Event", "데이터 보냄");
 
-                while (true) {
-                    new Thread(() -> {
-                        imageCapture.takePicture(ContextCompat.getMainExecutor(view.getContext()), new ImageCapture.OnImageCapturedCallback() {
-                            @Override
-                            @OptIn(markerClass = ExperimentalGetImage.class)
-                            public void onCaptureSuccess(@NonNull ImageProxy image) {
-                                super.onCaptureSuccess(image);
-                                // image to bitmap
-                                Bitmap bitmap = imageToBitmap(image.getImage());
-                                image.close();
-                                ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream);
-                                byteArray = stream.toByteArray();
-                                new Thread(() -> {
-                                    try {
-                                        outputStream.writeObject(byteArray);
-                                        outputStream.flush();
-                                    } catch (IOException e) {
-                                        throw new RuntimeException(e);
-                                    }
-                                    Log.d("Socket Event", "데이터 보냄");
-                                }).start();
-                            }
+                HandlerThread handlerThread = new HandlerThread("CaptureCallbackThread");
+                handlerThread.start();
+                Handler captureCallbackHandler = new Handler(handlerThread.getLooper());
 
-                            @Override
-                            public void onError(@NonNull final ImageCaptureException exception) {
-                                super.onError(exception);
-                                exception.printStackTrace();
-                            }
-                        });
-                    }).start();
-                    Log.d("Socket Event", "Loop");
-                    Thread.sleep(100);
-                    if (socket.isClosed()) {
-                        break;
+                captureRequstBuilder.addTarget(imageReader.getSurface());
+                cameraCaptureSession.setRepeatingRequest(captureRequstBuilder.build(), new CameraCaptureSession.CaptureCallback() {
+                    @Override
+                    public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                        super.onCaptureCompleted(session, request, result);
+                        Image image = imageReader.acquireLatestImage();
+                        Bitmap bitmap = imageToBitmap(image);
+                        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 40, stream);
+                        byteArray = stream.toByteArray();
+                        try {
+                            outputStream.writeObject(byteArray);
+                            outputStream.flush();
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                        Log.d("Socket Event", "데이터 보냄");
                     }
-                }
+                }, captureCallbackHandler);
+                new Thread(() -> {
+                    while (true) {
+                        if (socket.isClosed()) {
+                            captureRequstBuilder.removeTarget(imageReader.getSurface());
+                            try {
+                                cameraCaptureSession.setRepeatingRequest(captureRequstBuilder.build(), null, null);
+                            } catch (CameraAccessException e) {
+                                throw new RuntimeException(e);
+                            }
+                            break;
+                        }
+                    }
+                }).start();
             }
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -123,7 +124,9 @@ public class SocketServer {
         ByteBuffer buffer = image.getPlanes()[0].getBuffer();
         byte[] bytes = new byte[buffer.capacity()];
         buffer.get(bytes);
-        Bitmap bitmapImage = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, null);
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inPreferredConfig = Bitmap.Config.RGB_565;
+        Bitmap bitmapImage = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
         image.close();
 
         return bitmapImage;
