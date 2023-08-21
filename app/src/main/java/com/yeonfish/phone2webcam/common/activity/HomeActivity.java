@@ -28,14 +28,20 @@ import androidx.camera.core.CameraSelector;
 import androidx.core.app.ActivityCompat;
 
 import com.yeonfish.phone2webcam.R;
+import com.yeonfish.phone2webcam.common.activity.BaseActivity;
 import com.yeonfish.phone2webcam.common.cameraUtil.Zoom;
+import com.yeonfish.phone2webcam.common.socket.CustomSocket;
+import com.yeonfish.phone2webcam.common.socket.OnSocketEvent;
+import com.yeonfish.phone2webcam.common.socket.SocketAdapter;
 import com.yeonfish.phone2webcam.common.socket.SocketServer;
+import com.yeonfish.phone2webcam.common.socket.VideoStream;
 import com.yeonfish.phone2webcam.databinding.ActivityHomeBinding;
 
+import java.net.SocketException;
 import java.util.Arrays;
 
 
-public class HomeActivity extends BaseActivity {
+public class HomeActivity extends BaseActivity implements OnSocketEvent {
     private static final int PERMISSION_REQUEST_CODE = 1;
 
     private static final int FULL_SCREEN_SETTING = View.SYSTEM_UI_FLAG_FULLSCREEN |
@@ -67,14 +73,16 @@ public class HomeActivity extends BaseActivity {
     private CameraManager manager;
     private CameraDevice cameraDevice;
     private CameraCaptureSession cameraCaptureSession;
-    private CaptureRequest captureRequest;
     private CaptureRequest.Builder captureRequestBuilder;
     private Size imageDimensions;
     private TextureView textureView;
-    private ImageReader imageReader;
     private Zoom zoom;
     private boolean isChanging = false; // Is camera changing in progress between front/back
     private Context context;
+
+    // Streaming
+    private SocketAdapter socketAdapter;
+    private VideoStream videoStream;
 
 
     @Override
@@ -84,10 +92,13 @@ public class HomeActivity extends BaseActivity {
         setContentView(binding.getRoot());
         context = this;
 
-
         // camera2
         textureView = binding.cameraView;
         startCamera();
+
+        // streaming
+        socketAdapter = new SocketAdapter();
+        videoStream = new VideoStream(textureView);
 
         binding.imageButton8.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -152,7 +163,6 @@ public class HomeActivity extends BaseActivity {
         zoom = new Zoom(characteristics);
 
         imageDimensions = map.getOutputSizes(SurfaceTexture.class)[2];
-        imageReader = ImageReader.newInstance(imageDimensions.getWidth(), imageDimensions.getHeight(), ImageFormat.JPEG, 1);
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             manager.openCamera(cameraId, stateCallback, null);
@@ -169,7 +179,7 @@ public class HomeActivity extends BaseActivity {
         captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG);
         captureRequestBuilder.addTarget(surface);
 
-        cameraDevice.createCaptureSession(Arrays.asList(surface, imageReader.getSurface()), new CameraCaptureSession.StateCallback() {
+        cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback() {
             @Override
             public void onConfigured(@NonNull CameraCaptureSession session) {
                 if (cameraDevice == null) {
@@ -179,7 +189,7 @@ public class HomeActivity extends BaseActivity {
                 cameraCaptureSession = session;
 
                 new Thread(() -> {
-                    SocketServer socketServer = new SocketServer(context, 17101, captureRequestBuilder, cameraCaptureSession, imageReader);
+                    SocketServer socketServer = new SocketServer(context, 17101, (HomeActivity)context);
                 }).start();
 
                 try {
@@ -256,6 +266,18 @@ public class HomeActivity extends BaseActivity {
             cameraDevice = null;
         }
     };
+
+    @Override
+    public void OnClientConnect(CustomSocket socket) throws SocketException {
+        socketAdapter.appendClient(socket);
+        if (!videoStream.isSocketSet())
+            videoStream.setSocket(socket);
+
+        if (videoStream.isStreaming())
+            return;
+
+        videoStream.start();
+    }
 
     @Override
     public void finish() {
