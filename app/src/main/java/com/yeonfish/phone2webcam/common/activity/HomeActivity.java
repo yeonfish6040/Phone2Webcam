@@ -74,6 +74,7 @@ public class HomeActivity extends BaseActivity {
     private ImageReader imageReader;
     private Zoom zoom;
     private boolean isChanging = false; // Is camera changing in progress between front/back
+    private Context context;
 
 
     @Override
@@ -81,6 +82,7 @@ public class HomeActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         binding = ActivityHomeBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        context = this;
 
 
         // camera2
@@ -177,7 +179,7 @@ public class HomeActivity extends BaseActivity {
                 cameraCaptureSession = session;
 
                 new Thread(() -> {
-                    SocketServer socketServer = new SocketServer(17101, captureRequestBuilder, cameraCaptureSession, imageReader);
+                    SocketServer socketServer = new SocketServer(context, 17101, captureRequestBuilder, cameraCaptureSession, imageReader);
                 }).start();
 
                 try {

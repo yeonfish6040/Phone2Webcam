@@ -1,5 +1,6 @@
 package com.yeonfish.phone2webcam.common.socket;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.hardware.camera2.CameraAccessException;
@@ -32,6 +33,7 @@ public class SocketServer {
     private PreviewView view;
     private ServerSocket serverSocket;
     private ActivityHomeBinding binding;
+    Context context;
     private ImageReader imageReader;
     CameraCaptureSession cameraCaptureSession;
     CaptureRequest.Builder captureRequstBuilder;
@@ -39,7 +41,8 @@ public class SocketServer {
 
 
 
-    public SocketServer(int port, CaptureRequest.Builder captureRequstBuilder, CameraCaptureSession cameraCaptureSession, ImageReader imageReader) {
+    public SocketServer(Context context,int port, CaptureRequest.Builder captureRequstBuilder, CameraCaptureSession cameraCaptureSession, ImageReader imageReader) {
+        this.context = context;
         this.port = port;
         this.captureRequstBuilder = captureRequstBuilder;
         this.cameraCaptureSession = cameraCaptureSession;
@@ -87,6 +90,16 @@ public class SocketServer {
                     @Override
                     public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                         super.onCaptureCompleted(session, request, result);
+
+                        if (socket.isClosed()) {
+                            captureRequstBuilder.removeTarget(imageReader.getSurface());
+                            try {
+                                cameraCaptureSession.setRepeatingRequest(captureRequstBuilder.build(), null, null);
+                            } catch (CameraAccessException e) {
+                                throw new RuntimeException(e);
+                            }
+                            return;
+                        }
                         Image image = imageReader.acquireLatestImage();
                         Bitmap bitmap = imageToBitmap(image);
                         ByteArrayOutputStream stream = new ByteArrayOutputStream();
@@ -98,22 +111,8 @@ public class SocketServer {
                         } catch (IOException e) {
                             throw new RuntimeException(e);
                         }
-                        Log.d("Socket Event", "데이터 보냄");
                     }
                 }, captureCallbackHandler);
-                new Thread(() -> {
-                    while (true) {
-                        if (socket.isClosed()) {
-                            captureRequstBuilder.removeTarget(imageReader.getSurface());
-                            try {
-                                cameraCaptureSession.setRepeatingRequest(captureRequstBuilder.build(), null, null);
-                            } catch (CameraAccessException e) {
-                                throw new RuntimeException(e);
-                            }
-                            break;
-                        }
-                    }
-                }).start();
             }
         } catch (Exception ex) {
             ex.printStackTrace();
