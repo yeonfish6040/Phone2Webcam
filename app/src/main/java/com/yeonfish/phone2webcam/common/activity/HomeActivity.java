@@ -3,7 +3,6 @@ package com.yeonfish.phone2webcam.common.activity;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -13,7 +12,6 @@ import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
-import android.media.ImageReader;
 import android.os.Bundle;
 import android.util.Size;
 import android.util.SparseIntArray;
@@ -28,7 +26,6 @@ import androidx.camera.core.CameraSelector;
 import androidx.core.app.ActivityCompat;
 
 import com.yeonfish.phone2webcam.R;
-import com.yeonfish.phone2webcam.common.activity.BaseActivity;
 import com.yeonfish.phone2webcam.common.cameraUtil.Zoom;
 import com.yeonfish.phone2webcam.common.socket.CustomSocket;
 import com.yeonfish.phone2webcam.common.socket.OnSocketEvent;
@@ -128,7 +125,8 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
                     float percentage = 1 / characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
                     float current = percentage * zoomRatio;
                     binding.textView.setText(String.valueOf((int) (current * 100)) + "%");
-                    zoom.setZoom(captureRequestBuilder, 2f);
+                    zoom.setZoom(captureRequestBuilder, zoomRatio);
+                    updatePreview();
                 } catch (CameraAccessException e) {
                     throw new RuntimeException(e);
                 }
