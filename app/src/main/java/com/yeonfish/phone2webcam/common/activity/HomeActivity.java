@@ -3,6 +3,7 @@ package com.yeonfish.phone2webcam.common.activity;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -11,7 +12,9 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.ImageReader;
 import android.os.Bundle;
 import android.util.Size;
 import android.util.SparseIntArray;
@@ -27,18 +30,17 @@ import androidx.core.app.ActivityCompat;
 
 import com.yeonfish.phone2webcam.R;
 import com.yeonfish.phone2webcam.common.cameraUtil.Zoom;
-import com.yeonfish.phone2webcam.common.socket.CustomSocket;
-import com.yeonfish.phone2webcam.common.socket.OnSocketEvent;
-import com.yeonfish.phone2webcam.common.socket.SocketAdapter;
-import com.yeonfish.phone2webcam.common.socket.SocketServer;
-import com.yeonfish.phone2webcam.common.socket.VideoStream;
+import com.yeonfish.phone2webcam.common.streaming.StreamEvent;
+import com.yeonfish.phone2webcam.common.streaming.ClientManager;
+import com.yeonfish.phone2webcam.common.streaming.UDPServer;
 import com.yeonfish.phone2webcam.databinding.ActivityHomeBinding;
 
-import java.net.SocketException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 
-public class HomeActivity extends BaseActivity implements OnSocketEvent {
+public class HomeActivity extends BaseActivity {
     private static final int PERMISSION_REQUEST_CODE = 1;
 
     private static final int FULL_SCREEN_SETTING = View.SYSTEM_UI_FLAG_FULLSCREEN |
@@ -65,7 +67,7 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
 
     private int cLens = CameraSelector.LENS_FACING_BACK;
 
-    // Camera2 Variables
+    // Camera2 variables
     private String cameraId;
     private CameraManager manager;
     private CameraDevice cameraDevice;
@@ -77,9 +79,12 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
     private boolean isChanging = false; // Is camera changing in progress between front/back
     private Context context;
 
-    // Streaming
-    private SocketAdapter socketAdapter;
-    private VideoStream videoStream;
+    // streaming variables
+    private int port = 19001;
+    private ClientManager clientManager;
+    private UDPServer udpServer;
+    public List<String> clients;
+    private ImageReader reader;
 
 
     @Override
@@ -87,6 +92,7 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
         super.onCreate(savedInstanceState);
         binding = ActivityHomeBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        getWindow().getDecorView().setSystemUiVisibility(FULL_SCREEN_SETTING);
         context = this;
 
         // camera2
@@ -94,13 +100,15 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
         startCamera();
 
         // streaming
-        socketAdapter = new SocketAdapter();
-        videoStream = new VideoStream(textureView);
+        clients = new ArrayList<>();
+
+
 
         binding.imageButton8.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (isChanging) return;
+                clientManager.close();
                 try {
                     isChanging = true;
                     cameraDevice.close();
@@ -146,6 +154,7 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
     }
 
 
+
     private void startCamera() {
         textureView.setSurfaceTextureListener(textureListener);
     }
@@ -162,6 +171,14 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
 
         imageDimensions = map.getOutputSizes(SurfaceTexture.class)[2];
 
+        // start server
+        try {
+            clientManager = new ClientManager(port, imageDimensions.getHeight()*imageDimensions.getWidth(), clients);
+            clientManager.startClientRegistering();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             manager.openCamera(cameraId, stateCallback, null);
         } else {
@@ -173,11 +190,14 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
         SurfaceTexture texture = textureView.getSurfaceTexture();
         texture.setDefaultBufferSize(imageDimensions.getWidth(), imageDimensions.getHeight());
         Surface surface = new Surface(texture);
+        reader = ImageReader.newInstance(imageDimensions.getWidth(), imageDimensions.getHeight(), ImageFormat.JPEG, 5);
 
         captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG);
+        captureRequestBuilder.addTarget(reader.getSurface());
         captureRequestBuilder.addTarget(surface);
 
-        cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback() {
+
+        cameraDevice.createCaptureSession(Arrays.asList(surface, reader.getSurface()), new CameraCaptureSession.StateCallback() {
             @Override
             public void onConfigured(@NonNull CameraCaptureSession session) {
                 if (cameraDevice == null) {
@@ -186,9 +206,8 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
 
                 cameraCaptureSession = session;
 
-                new Thread(() -> {
-                    SocketServer socketServer = new SocketServer(context, 17101, (HomeActivity)context);
-                }).start();
+                udpServer = new UDPServer(reader, clients);
+
 
                 try {
                     updatePreview();
@@ -210,7 +229,19 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
         }
 
         captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, null);
+        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), new CameraCaptureSession.CaptureCallback() {
+            @Override
+            public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
+                super.onCaptureStarted(session, request, timestamp, frameNumber);
+            }
+
+            @Override
+            public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                super.onCaptureCompleted(session, request, result);
+
+                ((StreamEvent)udpServer).OnNewCapture(clientManager);
+            }
+        }, null);
 
     }
 
@@ -264,18 +295,6 @@ public class HomeActivity extends BaseActivity implements OnSocketEvent {
             cameraDevice = null;
         }
     };
-
-    @Override
-    public void OnClientConnect(CustomSocket socket) throws SocketException {
-        socketAdapter.appendClient(socket);
-        if (!videoStream.isSocketSet())
-            videoStream.setSocket(socket);
-
-        if (videoStream.isStreaming())
-            return;
-
-        videoStream.start();
-    }
 
     @Override
     public void finish() {
