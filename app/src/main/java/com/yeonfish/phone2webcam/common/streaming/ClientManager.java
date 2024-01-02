@@ -78,7 +78,7 @@ public class ClientManager implements StreamEvent {
 
     private void sendPacket(InetAddress host, byte[] data) throws IOException {
 
-        int chunkSize = 1024;
+        int chunkSize = 1000;
         int totalChunks = ((int) Math.ceil((double) data.length / chunkSize));
 
         Log.d("Total chunks", String.valueOf(totalChunks));
@@ -90,11 +90,11 @@ public class ClientManager implements StreamEvent {
             byte[] chunk = new byte[length];
             System.arraycopy(data, offset, chunk, 0, length);
 
-            byte[] sPacket = new SequencedPacket(i, chunk).toString().getBytes(StandardCharsets.UTF_8);
+            byte[] sPacket = new SequencedPacket(i, chunk).toSequencedPacketData();
             this.dgramSocket.send(new DatagramPacket(sPacket, sPacket.length, host, this.port));
         }
 
-        byte[] sPacket = new SequencedPacket((totalChunks+1)*-1, null).toString().getBytes(StandardCharsets.UTF_8);
+        byte[] sPacket = new SequencedPacket((totalChunks+1)*-1, null).toSequencedPacketData();
         this.dgramSocket.send(new DatagramPacket(sPacket, sPacket.length, host, this.port));
     }
 
@@ -116,7 +116,7 @@ public class ClientManager implements StreamEvent {
                 System.arraycopy(dgramPacketRecv.getData(), 0, receivedData, 0, dgramPacketRecv.getLength());
                 currentPacketCount++;
 
-                SequencedPacket sequencedPacket = new SequencedPacket(new String(receivedData, StandardCharsets.UTF_8));
+                SequencedPacket sequencedPacket = new SequencedPacket(receivedData);
                 Log.d("Raw string", new String(receivedData, StandardCharsets.UTF_8));
 
                 Log.d("Sequenced packet", "num: "+sequencedPacket.getSequenceNumber());

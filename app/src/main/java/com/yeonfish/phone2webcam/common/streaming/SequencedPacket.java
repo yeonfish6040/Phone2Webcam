@@ -1,5 +1,9 @@
 package com.yeonfish.phone2webcam.common.streaming;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class SequencedPacket {
@@ -7,13 +11,17 @@ public class SequencedPacket {
     private int sequenceNumber;
     private byte[] data;
 
-    public SequencedPacket(String serialized) {
-        String[] deserialized = serialized.split("\\|");
-        this.sequenceNumber = Integer.parseInt(deserialized[0]);
-        if (deserialized[1].equals("null"))
+    public SequencedPacket(byte[] serialized) {
+        byte[] header = new byte[24];
+
+        System.arraycopy(serialized, 0, header, 0, 24);
+        if (serialized.length != 24) {
+            this.data = new byte[serialized.length-24];
+            System.arraycopy(serialized, 24, this.data, 0, serialized.length-24);
+        }else
             this.data = null;
-        else
-            this.data = fromString(deserialized[1]);
+
+        this.sequenceNumber = ByteBuffer.wrap(header).getInt();
     }
 
     public SequencedPacket(int sequenceNumber, byte[] data) {
@@ -29,23 +37,18 @@ public class SequencedPacket {
         return data;
     }
 
-    public String toString() {
-        StringBuffer serialized = new StringBuffer();
-        serialized.append(this.sequenceNumber);
-        serialized.append("|");
-        serialized.append(Arrays.toString(this.data));
+    public byte[] toSequencedPacketData() throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] header = ByteBuffer.allocate(24).putInt(this.sequenceNumber).array();
 
-        return serialized.toString();
-    }
+        baos.write(header);
 
-    private static byte[] fromString(String byteArrayString) {
-        String[] stringValues = byteArrayString.replaceAll("\\[|\\]|\\s", "").split(",");
-        byte[] result = new byte[stringValues.length];
+        if (this.data != null)
+            baos.write(this.data);
 
-        for (int i = 0; i < stringValues.length; i++) {
-            result[i] = (byte) Integer.parseInt(stringValues[i].trim(), 10);
-        }
+        byte[] sequencedPacketData = baos.toByteArray();
+        baos.close();
 
-        return result;
+        return sequencedPacketData;
     }
 }
