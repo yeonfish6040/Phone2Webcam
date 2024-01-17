@@ -24,14 +24,13 @@ import com.yeonfish.phone2webcam.common.streaming.SequencedPacket;
 
 public class ClientManager implements StreamEvent {
     private int port;
-    private int pSize;
     private DatagramSocket dgramSocket;
     private List<String> clients;
+    private String isClosed = "0";
 
 
-    public ClientManager(int port, int pSize, List<String> clients) throws SocketException {
+    public ClientManager(int port, List<String> clients) throws SocketException {
         this.port = port;
-        this.pSize = pSize;
         this.clients = clients;
         this.dgramSocket = new DatagramSocket(this.port);
     }
@@ -43,6 +42,7 @@ public class ClientManager implements StreamEvent {
                 while(true) {
                     try {
                         CustomPacket dgramPacketRecv = receivePacket(1024, 0);
+                        if (isClosed.equals("1")) break;
 
                         String data = new String(dgramPacketRecv.data, StandardCharsets.UTF_8);
                         Log.d("Packet received", data);
@@ -51,12 +51,8 @@ public class ClientManager implements StreamEvent {
                             String ip = dgramPacketRecv.packet.getAddress().getHostAddress();
 
                             Log.i("IP", ip);
-
-//                        Pattern p = Pattern.compile("[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}");
-//                        Matcher m = p.matcher(ip);
-//                        ip = m.group();
-
-                            sendPacket(InetAddress.getByName(ip), ("P2WC-registerResult_SUCCESS|" + String.valueOf(pSize)).getBytes(StandardCharsets.UTF_8));
+                            
+                            sendPacket(InetAddress.getByName(ip), ("P2WC-registerResult_SUCCESS").getBytes(StandardCharsets.UTF_8));
                         }
 
                         if (data.contains("P2WC-request")) {
@@ -66,6 +62,7 @@ public class ClientManager implements StreamEvent {
                         }
                     } catch (IOException e) {
                         e.printStackTrace();
+                        break;
                     }
                 }
             }
@@ -73,6 +70,7 @@ public class ClientManager implements StreamEvent {
     }
 
     public void close() {
+        isClosed = "1";
         this.dgramSocket.close();
     }
 

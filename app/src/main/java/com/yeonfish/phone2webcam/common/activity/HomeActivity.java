@@ -102,7 +102,13 @@ public class HomeActivity extends BaseActivity {
         // streaming
         clients = new ArrayList<>();
 
-
+        // start server
+        try {
+            clientManager = new ClientManager(port, clients);
+            clientManager.startClientRegistering();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
         binding.imageButton8.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -114,6 +120,12 @@ public class HomeActivity extends BaseActivity {
                     cameraDevice.close();
                     cLens = cLens == CameraSelector.LENS_FACING_BACK ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
                     openCamera(cLens==CameraSelector.LENS_FACING_BACK?0:1);
+                    try {
+                        clientManager = new ClientManager(port, clients);
+                        clientManager.startClientRegistering();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
                 } catch (CameraAccessException e) {
                     throw new RuntimeException(e);
                 } finally {
@@ -171,14 +183,6 @@ public class HomeActivity extends BaseActivity {
 
         imageDimensions = map.getOutputSizes(SurfaceTexture.class)[2];
 
-        // start server
-        try {
-            clientManager = new ClientManager(port, imageDimensions.getHeight()*imageDimensions.getWidth(), clients);
-            clientManager.startClientRegistering();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             manager.openCamera(cameraId, stateCallback, null);
         } else {
@@ -229,6 +233,8 @@ public class HomeActivity extends BaseActivity {
         }
 
         captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+
+        cameraCaptureSession.stopRepeating();
         cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), new CameraCaptureSession.CaptureCallback() {
             @Override
             public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
