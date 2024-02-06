@@ -47,7 +47,7 @@ public class ClientManager implements StreamEvent {
                         String data = new String(dgramPacketRecv.data, StandardCharsets.UTF_8);
                         Log.d("Packet received", data);
 
-                        if (data.contains("P2WC-register_")) {
+                        if (data.contains("P2WC-register")) {
                             String ip = dgramPacketRecv.packet.getAddress().getHostAddress();
 
                             Log.i("IP", ip);

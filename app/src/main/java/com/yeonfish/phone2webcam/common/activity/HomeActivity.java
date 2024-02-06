@@ -3,6 +3,8 @@ package com.yeonfish.phone2webcam.common.activity;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -12,8 +14,8 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
-import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.Image;
 import android.media.ImageReader;
 import android.os.Bundle;
 import android.util.Size;
@@ -30,11 +32,12 @@ import androidx.core.app.ActivityCompat;
 
 import com.yeonfish.phone2webcam.R;
 import com.yeonfish.phone2webcam.common.cameraUtil.Zoom;
-import com.yeonfish.phone2webcam.common.streaming.StreamEvent;
 import com.yeonfish.phone2webcam.common.streaming.ClientManager;
-import com.yeonfish.phone2webcam.common.streaming.UDPServer;
+import com.yeonfish.phone2webcam.common.streaming.StreamEvent;
 import com.yeonfish.phone2webcam.databinding.ActivityHomeBinding;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -82,9 +85,9 @@ public class HomeActivity extends BaseActivity {
     // streaming variables
     private int port = 19001;
     private ClientManager clientManager;
-    private UDPServer udpServer;
     public List<String> clients;
     private ImageReader reader;
+    private Bitmap bitmapImage;
 
 
     @Override
@@ -134,22 +137,11 @@ public class HomeActivity extends BaseActivity {
             }
         });
         binding.seekBar.setMin(0);
+        binding.seekBar.setMax(100);
         binding.seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean byUser) {
-                try {
-                    CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-
-                    float zoomRatio = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) / seekBar.getMax() * (float) progress;
-
-                    float percentage = 1 / characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
-                    float current = percentage * zoomRatio;
-                    binding.textView.setText(String.valueOf((int) (current * 100)) + "%");
-                    zoom.setZoom(captureRequestBuilder, zoomRatio);
-                    updatePreview();
-                } catch (CameraAccessException e) {
-                    throw new RuntimeException(e);
-                }
+                binding.textView.setText(String.valueOf(binding.seekBar.getProgress())+"%");
             }
 
             @Override
@@ -162,7 +154,7 @@ public class HomeActivity extends BaseActivity {
 
             }
         });
-
+        binding.seekBar.setProgress(100);
     }
 
 
@@ -195,6 +187,7 @@ public class HomeActivity extends BaseActivity {
         texture.setDefaultBufferSize(imageDimensions.getWidth(), imageDimensions.getHeight());
         Surface surface = new Surface(texture);
         reader = ImageReader.newInstance(imageDimensions.getWidth(), imageDimensions.getHeight(), ImageFormat.JPEG, 5);
+        reader.setOnImageAvailableListener(imageListener, null);
 
         captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG);
         captureRequestBuilder.addTarget(reader.getSurface());
@@ -209,9 +202,6 @@ public class HomeActivity extends BaseActivity {
                 }
 
                 cameraCaptureSession = session;
-
-                udpServer = new UDPServer(reader, clients);
-
 
                 try {
                     updatePreview();
@@ -234,20 +224,11 @@ public class HomeActivity extends BaseActivity {
 
         captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
 
-        cameraCaptureSession.stopRepeating();
-        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), new CameraCaptureSession.CaptureCallback() {
-            @Override
-            public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
-                super.onCaptureStarted(session, request, timestamp, frameNumber);
-            }
+        if (!cameraCaptureSession.isReprocessable()) {
+            cameraCaptureSession.stopRepeating();
+        }
 
-            @Override
-            public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
-                super.onCaptureCompleted(session, request, result);
-
-                ((StreamEvent)udpServer).OnNewCapture(clientManager);
-            }
-        }, null);
+        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, null);
 
     }
 
@@ -301,6 +282,61 @@ public class HomeActivity extends BaseActivity {
             cameraDevice = null;
         }
     };
+
+    private final ImageReader.OnImageAvailableListener imageListener = new ImageReader.OnImageAvailableListener() {
+        @Override
+        public void onImageAvailable(ImageReader reader) {
+            Image img = reader.acquireLatestImage();
+            if (clients.size() == 0) { img.close(); return; }
+            if (img == null || img.getPlanes()[0] == null) {
+                return;
+            }
+            Bitmap bitmap = imageToBitmap(img); img.close();
+
+            ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+
+            bitmap.compress(Bitmap.CompressFormat.JPEG, binding.seekBar.getProgress(), byteStream);
+
+            byte[] byteArray = byteStream.toByteArray();
+
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    if (clients.size() != 0) {
+                        clients.forEach(host -> {
+                            ((StreamEvent)clientManager).SendImg(host, byteArray);
+                        });
+                        clients.clear();
+                    }
+                }
+            }).start();
+        }
+    };
+
+    private Bitmap imageToBitmap(Image image) {
+        if (bitmapImage == null) {
+            bitmapImage = Bitmap.createBitmap(image.getWidth(), image.getHeight(), Bitmap.Config.RGB_565);
+        }
+
+        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+        byte[] resultRGB = getActiveArray(buffer);
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inMutable = true;
+        bitmapImage = BitmapFactory.decodeByteArray(resultRGB, 0, resultRGB.length, options);
+
+        return bitmapImage;
+    }
+
+    public byte[] getActiveArray(ByteBuffer buffer) {
+        byte[] ret = new byte[buffer.remaining()];
+        if (buffer.hasArray()) {
+            byte[] array = buffer.array();
+            System.arraycopy(array, buffer.arrayOffset() + buffer.position(), ret, 0, ret.length);
+        } else {
+            buffer.slice().get(ret);
+        }
+        return ret;
+    }
 
     @Override
     public void finish() {
