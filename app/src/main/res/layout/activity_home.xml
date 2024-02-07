@@ -8,17 +8,16 @@
     android:background="#ffffff"
     android:orientation="vertical">
 
-    <androidx.camera.view.PreviewView
+    <TextureView
         android:id="@+id/cameraView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_alignParentBottom="true"
         android:layout_marginBottom="0dp"
-        android:background="@color/gray_bg_option"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-    </androidx.camera.view.PreviewView>
+    </TextureView>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/socketRecyclerView"
@@ -39,6 +38,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textAlignment="center"
+            android:alpha="1"
             android:text="0%" />
 
         <ImageButton
@@ -50,12 +50,14 @@
             android:background="@null"
             android:contentDescription="@string/change_camera"
             android:scaleType="fitCenter"
+            android:alpha="1"
             app:srcCompat="@drawable/change" />
 
         <SeekBar
             android:id="@+id/seekBar"
             android:layout_width="359dp"
             android:layout_height="83dp"
+            android:alpha="1"
             android:layout_gravity="center" />
 
     </LinearLayout>

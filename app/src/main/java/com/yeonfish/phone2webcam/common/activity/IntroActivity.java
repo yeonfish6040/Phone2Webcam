@@ -167,8 +167,8 @@ public class IntroActivity extends BaseActivity {
                     Toast.makeText(this, "알림이 설정되었습니다.", Toast.LENGTH_SHORT).show();
                     resume();
                 } else {
-                    Toast.makeText(this, "알림권한이 거부된 상태입니다.", Toast.LENGTH_SHORT).show();
-                    resume();
+                    Toast.makeText(this, "알림권한이 거부된 상태입니다. 설정에 들어가서 별도로 권한을 허용 후, 다시 앱을 시작해주세요.", Toast.LENGTH_LONG).show();
+                    finish();
                 }
                 break;
         }
