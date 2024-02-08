@@ -18,6 +18,7 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Bundle;
+import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
@@ -35,6 +36,7 @@ import com.yeonfish.phone2webcam.common.cameraUtil.Zoom;
 import com.yeonfish.phone2webcam.common.image.ImageUtil;
 import com.yeonfish.phone2webcam.common.streaming.ClientManager;
 import com.yeonfish.phone2webcam.common.streaming.StreamEvent;
+import com.yeonfish.phone2webcam.common.util.Stopwatch;
 import com.yeonfish.phone2webcam.databinding.ActivityHomeBinding;
 
 import java.io.ByteArrayOutputStream;
@@ -287,26 +289,27 @@ public class HomeActivity extends BaseActivity {
     private final ImageReader.OnImageAvailableListener imageListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader reader) {
+            Stopwatch sw = new Stopwatch();
+
+            sw.Flag("Acquire image");
             Image img = reader.acquireNextImage();
+            sw.Flag();
+
             if (img == null) { return; }
             if (clients.size() == 0 || img.getPlanes()[0] == null) { img.close(); return; }
 
+            sw.Flag("Convert YUV into JPEG");
             byte[] jpeg = ImageUtil.YUV_420_888toJPEG(img);
-            BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inMutable = true;
-            bitmapImage = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, options);
+            sw.Flag();
 
-            ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-            bitmapImage.compress(Bitmap.CompressFormat.JPEG, binding.seekBar.getProgress(), byteStream);
-
-            byte[] byteArray = byteStream.toByteArray();
+            System.out.println(sw.printProfile(true));
 
             new Thread(new Runnable() {
                 @Override
                 public void run() {
                     if (clients.size() != 0) {
                         clients.forEach(host -> {
-                            ((StreamEvent)clientManager).SendImg(host, byteArray);
+                            ((StreamEvent)clientManager).SendImg(host, jpeg);
                         });
                         clients.clear();
                     }
