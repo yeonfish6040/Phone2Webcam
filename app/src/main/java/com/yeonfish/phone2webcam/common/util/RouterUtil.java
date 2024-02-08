@@ -6,25 +6,16 @@ import android.content.Intent;
 
 import com.yeonfish.phone2webcam.R;
 import com.yeonfish.phone2webcam.common.activity.HomeActivity;
-import com.yeonfish.phone2webcam.common.constant.CommonConstant;
-import com.yeonfish.phone2webcam.common.constant.URLConstant;
 
 public class RouterUtil {
 
     public static void gotoHome(Context context) {
-        gotoWebViewActivity(context, URLConstant.WEB_URL_HOME);
+        gotoWebViewActivity(context);
     }
 
-    public static void gotoHome(Context context, String url) {
-        if (url != null) {
-            gotoWebViewActivity(context, url);
-        }
-    }
-
-    public static void gotoWebViewActivity(Context context, String url) {
+    public static void gotoWebViewActivity(Context context) {
         if (context != null) {
             Intent intent = new Intent(context, HomeActivity.class);
-            intent.putExtra(CommonConstant.INTENT_PARAM_WEBVIEW_URL, url);
             context.startActivity(intent);
             applyActivityTransition(context);
         }

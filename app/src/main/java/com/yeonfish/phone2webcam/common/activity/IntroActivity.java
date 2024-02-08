@@ -5,7 +5,6 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
@@ -15,19 +14,6 @@ import androidx.core.content.ContextCompat;
 
 import com.yeonfish.phone2webcam.R;
 import com.yeonfish.phone2webcam.common.util.RouterUtil;
-
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.IOException;
-
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
 public class IntroActivity extends BaseActivity {
 
@@ -75,49 +61,47 @@ public class IntroActivity extends BaseActivity {
 //        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             resume();
-        } else {
-            requestCameraPermission();
         }
     }
 
 
-    private void sendRegistrationInfo(String token) {
-        String url = "http://lyj.kr:17001/register";
-        JSONObject json = new JSONObject();
-        try {
-            json.put("token", token);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-
-        RequestBody requestBody = RequestBody.create(json.toString(), MediaType.parse("application/json"));
-        Request request = new Request.Builder()
-                .url(url)
-                .post(requestBody)
-                .build();
-
-        OkHttpClient client = new OkHttpClient();
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                e.printStackTrace();
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                try (Response res = response) {
-                    if (!response.isSuccessful()) {
-                        throw new IOException("Unexpected code " + response);
-                    }
-
-                    String responseBody = res.body().string();
-                    if (responseBody != null) {
-                        Log.i("RES", responseBody);
-                    }
-                }
-            }
-        });
-    }
+//    private void sendRegistrationInfo(String token) {
+//        String url = "http://lyj.kr:17001/register";
+//        JSONObject json = new JSONObject();
+//        try {
+//            json.put("token", token);
+//        } catch (JSONException e) {
+//            e.printStackTrace();
+//        }
+//
+//        RequestBody requestBody = RequestBody.create(json.toString(), MediaType.parse("application/json"));
+//        Request request = new Request.Builder()
+//                .url(url)
+//                .post(requestBody)
+//                .build();
+//
+//        OkHttpClient client = new OkHttpClient();
+//        client.newCall(request).enqueue(new Callback() {
+//            @Override
+//            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+//                e.printStackTrace();
+//            }
+//
+//            @Override
+//            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+//                try (Response res = response) {
+//                    if (!response.isSuccessful()) {
+//                        throw new IOException("Unexpected code " + response);
+//                    }
+//
+//                    String responseBody = res.body().string();
+//                    if (responseBody != null) {
+//                        Log.i("RES", responseBody);
+//                    }
+//                }
+//            }
+//        });
+//    }
 
     private void resume() {
         imgSplash.setAlpha(0f);
@@ -130,7 +114,7 @@ public class IntroActivity extends BaseActivity {
                     public void onAnimationEnd(Animator animation) {
                         imgSplash.animate().setListener(null);
                         if (notificationUrl != null) {
-                            RouterUtil.gotoHome(IntroActivity.this, notificationUrl);
+                            RouterUtil.gotoHome(IntroActivity.this);
                         } else {
                             RouterUtil.gotoHome(IntroActivity.this);
                         }
@@ -139,14 +123,14 @@ public class IntroActivity extends BaseActivity {
                 .start();
     }
 
-    private void requestNotificationPermission() {
-        if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
-            Toast.makeText(this, "정상적인 서비스 이용을 위하여 알림을 허용해주세요", Toast.LENGTH_SHORT).show();
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, PERMISSION_REQUEST_CODE);
-        } else {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, PERMISSION_REQUEST_CODE);
-        }
-    }
+//    private void requestNotificationPermission() {
+//        if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
+//            Toast.makeText(this, "정상적인 서비스 이용을 위하여 알림을 허용해주세요", Toast.LENGTH_SHORT).show();
+//            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, PERMISSION_REQUEST_CODE);
+//        } else {
+//            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, PERMISSION_REQUEST_CODE);
+//        }
+//    }
 
     private void requestCameraPermission() {
         if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {

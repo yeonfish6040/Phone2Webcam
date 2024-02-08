@@ -32,6 +32,7 @@ import androidx.core.app.ActivityCompat;
 
 import com.yeonfish.phone2webcam.R;
 import com.yeonfish.phone2webcam.common.cameraUtil.Zoom;
+import com.yeonfish.phone2webcam.common.image.ImageUtil;
 import com.yeonfish.phone2webcam.common.streaming.ClientManager;
 import com.yeonfish.phone2webcam.common.streaming.StreamEvent;
 import com.yeonfish.phone2webcam.databinding.ActivityHomeBinding;
@@ -186,7 +187,7 @@ public class HomeActivity extends BaseActivity {
         SurfaceTexture texture = textureView.getSurfaceTexture();
         texture.setDefaultBufferSize(imageDimensions.getWidth(), imageDimensions.getHeight());
         Surface surface = new Surface(texture);
-        reader = ImageReader.newInstance(imageDimensions.getWidth(), imageDimensions.getHeight(), ImageFormat.JPEG, 5);
+        reader = ImageReader.newInstance(imageDimensions.getWidth(), imageDimensions.getHeight(), ImageFormat.YUV_420_888, 5);
         reader.setOnImageAvailableListener(imageListener, null);
 
         captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG);
@@ -286,16 +287,17 @@ public class HomeActivity extends BaseActivity {
     private final ImageReader.OnImageAvailableListener imageListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader reader) {
-            Image img = reader.acquireLatestImage();
-            if (clients.size() == 0) { img.close(); return; }
-            if (img == null || img.getPlanes()[0] == null) {
-                return;
-            }
-            Bitmap bitmap = imageToBitmap(img); img.close();
+            Image img = reader.acquireNextImage();
+            if (img == null) { return; }
+            if (clients.size() == 0 || img.getPlanes()[0] == null) { img.close(); return; }
+
+            byte[] jpeg = ImageUtil.YUV_420_888toJPEG(img);
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inMutable = true;
+            bitmapImage = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, options);
 
             ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-
-            bitmap.compress(Bitmap.CompressFormat.JPEG, binding.seekBar.getProgress(), byteStream);
+            bitmapImage.compress(Bitmap.CompressFormat.JPEG, binding.seekBar.getProgress(), byteStream);
 
             byte[] byteArray = byteStream.toByteArray();
 
@@ -312,31 +314,6 @@ public class HomeActivity extends BaseActivity {
             }).start();
         }
     };
-
-    private Bitmap imageToBitmap(Image image) {
-        if (bitmapImage == null) {
-            bitmapImage = Bitmap.createBitmap(image.getWidth(), image.getHeight(), Bitmap.Config.RGB_565);
-        }
-
-        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-        byte[] resultRGB = getActiveArray(buffer);
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inMutable = true;
-        bitmapImage = BitmapFactory.decodeByteArray(resultRGB, 0, resultRGB.length, options);
-
-        return bitmapImage;
-    }
-
-    public byte[] getActiveArray(ByteBuffer buffer) {
-        byte[] ret = new byte[buffer.remaining()];
-        if (buffer.hasArray()) {
-            byte[] array = buffer.array();
-            System.arraycopy(array, buffer.arrayOffset() + buffer.position(), ret, 0, ret.length);
-        } else {
-            buffer.slice().get(ret);
-        }
-        return ret;
-    }
 
     @Override
     public void finish() {
